@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 from tqdm.notebook import tqdm
+from tqdm import trange
 plt.rcParams['figure.figsize'] = [15, 15]
 
 # Read image and convert them to gray!!
@@ -37,7 +38,9 @@ kp_right, des_right = SIFT(right_gray)
 kp_left_img = plot_sift(left_gray, left_rgb, kp_left)
 kp_right_img = plot_sift(right_gray, right_rgb, kp_right)
 total_kp = np.concatenate((kp_left_img, kp_right_img), axis=1)
-#plt.imshow(total_kp)
+plt.imshow(total_kp)
+print('successfully show total_kp')
+
 
 def matcher(kp1, des1, img1, kp2, des2, img2, threshold):
     # BFMatcher with default params
@@ -57,7 +60,8 @@ def matcher(kp1, des1, img1, kp2, des2, img2, threshold):
     matches = np.array(matches)
     return matches
 
-matches = matcher(kp_left, des_left, left_rgb, kp_right, des_right, right_rgb, 0.5)
+matches = matcher(kp_left, des_left, left_rgb, kp_right, des_right, right_rgb, 0.7)
+print('succeesfully obtain matches')
 
 def plot_matches(matches, total_img):
     match_img = total_img.copy()
@@ -75,7 +79,9 @@ def plot_matches(matches, total_img):
     plt.show()
 
 total_img = np.concatenate((left_rgb, right_rgb), axis=1)
-#plot_matches(matches, total_img) # Good mathces
+plot_matches(matches, total_img) # Good mathces
+print('successfully show plot matches')
+
 
 def homography(pairs):
     rows = []
@@ -134,19 +140,19 @@ def ransac(matches, threshold, iters):
     print("inliers/matches: {}/{}".format(num_best_inliers, len(matches)))
     return best_inliers, best_H
 
-inliers, H = ransac(matches, 0.5, 1000) #original 1000
+inliers, H = ransac(matches, 0.7, 1000) #original 1000
 
-#plot_matches(inliers, total_img) # show inliers matches
+plot_matches(inliers, total_img) # show inliers matches
+print('successfully show plot_matches')
 
 def stitch_img(left, right, H):
     print("stiching image ...")
 
     # Convert to double and normalize. Avoid noise.
-    left = cv2.normalize(left.astype('float'), None,
-                            0.0, 1.0, cv2.NORM_MINMAX)
+    left = cv2.normalize(left.astype('float'), None,0.0, 1.0, cv2.NORM_MINMAX)
+
     # Convert to double and normalize.
-    right = cv2.normalize(right.astype('float'), None,
-                            0.0, 1.0, cv2.NORM_MINMAX)
+    right = cv2.normalize(right.astype('float'), None,0.0, 1.0, cv2.NORM_MINMAX)
 
     # left image
     height_l, width_l, channel_l = left.shape
@@ -160,6 +166,7 @@ def stitch_img(left, right, H):
 
     translation_mat = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]])
     H = np.dot(translation_mat, H)
+
 
     # Get height, width
     height_new = int(round(abs(y_min) + height_l))
@@ -177,25 +184,36 @@ def stitch_img(left, right, H):
 
 
     warped_r = cv2.warpPerspective(src=right, M=translation_mat, dsize=size)
-    print(warped_r.shape[0])
     black = np.zeros(3)  # Black pixel.
 
-    # Stitching procedure, store results in warped_l.
-    for i in tqdm(range(warped_r.shape[0])):
-        for j in range(warped_r.shape[1]):
-            pixel_l = warped_l[i, j, :]
-            pixel_r = warped_r[i, j, :]
 
-            if not np.array_equal(pixel_l, black) and np.array_equal(pixel_r, black):
+    # Stitching procedure, store results in warped_l.
+    for i in trange(warped_r.shape[0]):
+        for j in range(warped_r.shape[1]):
+            pixel_l = warped_l[i, j, :] #3x1
+            pixel_r = warped_r[i, j, :] #3x1
+
+            #above can run and is ok 
+            #problem might be here
+            if not np.array_equal(pixel_l, black) and np.array_equal(pixel_r, black): #check two vector is in the same dimension
                 warped_l[i, j, :] = pixel_l
             elif np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
                 warped_l[i, j, :] = pixel_r
             elif not np.array_equal(pixel_l, black) and not np.array_equal(pixel_r, black):
                 warped_l[i, j, :] = (pixel_l + pixel_r) / 2
-            else:
+            else: 
                 pass
-
     stitch_image = warped_l[:warped_r.shape[0], :warped_r.shape[1], :]
+
+
     return stitch_image
 
-plt.imshow(stitch_img(left_rgb, right_rgb, H))
+# show final result
+plt.imshow(stitch_img(left_origin, right_origin, H))
+plt.show()
+print('successfully show stitch_image')
+
+# save output image for multi-stitching
+result_img = stitch_img(left_origin, right_origin, H)
+plt.imsave('new_stitch12.jpg',result_img)
+
